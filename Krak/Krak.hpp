@@ -92,19 +92,21 @@ nlohmann::json PostKraken(std::string uri,nlohmann::json comma,std::string key,s
 	{
 		coms += " --data-urlencode \""+comma[i][0].get<std::string>()+"="+comma[i][1].get<std::string>()+"\"";
 	}
+	
+	std::string file = base64_encode((const unsigned char*)coms.c_str(),coms.size())+".json";
 
 	//send the output of curl ot out.json
-	coms += " -o out.json";
+	coms += " -o "+file;
 
 	//send command
 	run(coms.c_str());
 
 	//load json data
 	nlohmann::json j;
-	std::ifstream ifs("out.json");
+	std::ifstream ifs(file);
 	j = nlohmann::json::parse(ifs);
 
-	std::remove("out.json");
+	std::remove(file.c_str());
 
 	return j;
 } 
@@ -277,7 +279,7 @@ class Krak
 
 			std::remove(file.c_str());
 
-			return j;
+			return j["result"];
 		}
 
 		//Get specific balance from account (Requires api key and seceret)
