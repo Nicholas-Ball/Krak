@@ -12,6 +12,8 @@
 #include "Crypto/base64.h"
 #include "nlohmann/json.hpp"
 
+std::string PYTHON = ("from time import time\nimport urllib.parse\nimport hashlib\nimport hmac\nimport argparse\nimport os\nimport base64\ndef sign(urlpath, data,nonce, secret):\n    encoded = (nonce + data).encode()\n    message = urlpath.encode() + hashlib.sha256(encoded).digest()\n    mac = hmac.new(base64.b64decode(secret.encode()), message, hashlib.sha512)\n    sigdigest = base64.b64encode(mac.digest())\n    return sigdigest.decode()\ndef main():\n	#Get data from flags\n	parser = argparse.ArgumentParser(description='Make a signture')\n	parser.add_argument('-S', dest='sec',type=str,help='set secret as base 64')\n	parser.add_argument('-N', dest='nonce',type=str,help='set nounce')\n	parser.add_argument('-C', dest='command',type=str,help='set command')\n	parser.add_argument('-P', dest='path',type=str,help='set uri path')\n	args = parser.parse_args()\n	if(args.command == \"null\"):\n		args.command = \"nonce=\"+args.nonce\n	sig = sign(args.path,args.command,args.nonce,args.sec)\n	#open file\n	file = open(\"sign.txt\",\"w\")\n	#write signiture to file\n	file.write(str(sig))\n	#close file\n	file.close()\nmain()");
+
 class API{
 	public:
 		std::string key;
@@ -45,18 +47,27 @@ void run(const char* command)
 
 std::string sign(API api)
 {
-	std::string com = ("python3 include/Krak/Crypto/sign.py -S "+api.seceret+" -N "+api.nonce+" -P "+api.uri+" -C \""+api.command+"\"");
+
+	//create python file for signing
+	std::ofstream file("sign.py");
+	file << PYTHON;
+	file.close();
+
+	std::string com = ("python3 sign.py -S "+api.seceret+" -N "+api.nonce+" -P "+api.uri+" -C \""+api.command+"\"");
 	
 	//run program to sign
 	run(com.c_str());
 
-	sp(1);
+	//remove python file
+	std::remove("sign.py");
 
+	//read signiture file
 	std::ifstream f("sign.txt");
-	
 	std::stringstream buffer;
 	buffer << f.rdbuf();
 	std::string sig = buffer.str();
+
+	//remove signiture file
 	std::remove("sign.txt");
 
 	return sig;
@@ -66,7 +77,8 @@ std::string sign(API api)
 nlohmann::json PostKraken(std::string uri,nlohmann::json comma,std::string key,std::string sec) {
 	API a;
 
-  const auto p1 = std::chrono::system_clock::now();
+	//get unix time
+  	const auto p1 = std::chrono::system_clock::now();
 
 	//build request
 	a.seceret = sec;
@@ -124,6 +136,9 @@ class Krak
 		std::string key;
 		std::string sec; 
 	public:
+		Krak()
+		{
+		} 
 		//set api key
 		void SetKey(std::string k)
 		{
