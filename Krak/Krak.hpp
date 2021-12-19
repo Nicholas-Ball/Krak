@@ -45,7 +45,7 @@ void run(const char* command)
 
 std::string sign(API api)
 {
-	std::string com = ("python3 Krak/Crypto/sign.py -S "+api.seceret+" -N "+api.nonce+" -P "+api.uri+" -C \""+api.command+"\"");
+	std::string com = ("python3 include/Krak/Crypto/sign.py -S "+api.seceret+" -N "+api.nonce+" -P "+api.uri+" -C \""+api.command+"\"");
 	
 	//run program to sign
 	run(com.c_str());
@@ -93,7 +93,7 @@ nlohmann::json PostKraken(std::string uri,nlohmann::json comma,std::string key,s
 		coms += " --data-urlencode \""+comma[i][0].get<std::string>()+"="+comma[i][1].get<std::string>()+"\"";
 	}
 	
-	std::string file = base64_encode((const unsigned char*)coms.c_str(),coms.size())+".json";
+	std::string file = "out.json";
 
 	//send the output of curl ot out.json
 	coms += " -o "+file;
@@ -279,7 +279,7 @@ class Krak
 
 			std::remove(file.c_str());
 
-			return j["result"];
+			return j["result"][symbol];
 		}
 
 		//Get specific balance from account (Requires api key and seceret)
