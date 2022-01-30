@@ -11,6 +11,7 @@
 #include <chrono>
 #include "Crypto/base64.h"
 #include "nlohmann/json.hpp"
+#include "net/net.hpp"
 
 std::string PYTHON = ("from time import time\nimport urllib.parse\nimport hashlib\nimport hmac\nimport argparse\nimport os\nimport base64\ndef sign(urlpath, data,nonce, secret):\n    encoded = (nonce + data).encode()\n    message = urlpath.encode() + hashlib.sha256(encoded).digest()\n    mac = hmac.new(base64.b64decode(secret.encode()), message, hashlib.sha512)\n    sigdigest = base64.b64encode(mac.digest())\n    return sigdigest.decode()\ndef main():\n	#Get data from flags\n	parser = argparse.ArgumentParser(description='Make a signture')\n	parser.add_argument('-S', dest='sec',type=str,help='set secret as base 64')\n	parser.add_argument('-N', dest='nonce',type=str,help='set nounce')\n	parser.add_argument('-C', dest='command',type=str,help='set command')\n	parser.add_argument('-P', dest='path',type=str,help='set uri path')\n	args = parser.parse_args()\n	if(args.command == \"null\"):\n		args.command = \"nonce=\"+args.nonce\n	sig = sign(args.path,args.command,args.nonce,args.sec)\n	#open file\n	file = open(\"sign.txt\",\"w\")\n	#write signiture to file\n	file.write(str(sig))\n	#close file\n	file.close()\nmain()");
 
@@ -22,17 +23,6 @@ class API{
 		std::string nonce;
 		std::string command;
 };
-
-//cross platform sleep function
-void sp(int sec)
-{	
-	#ifdef _WIN32
-		Sleep(sec*1000);
-	#else
-		sleep(sec);
-	#endif
-
-}
 
 //runs command without popup cross platform
 void run(const char* command)
@@ -58,8 +48,11 @@ std::string sign(API api)
 	//run program to sign
 	run(com.c_str());
 
-	//remove python file
-	std::remove("sign.py");
+	#ifdef __linux__
+		//remove python file
+		std::remove("sign.py");
+
+	#endif
 
 	//read signiture file
 	std::ifstream f("sign.txt");
@@ -93,11 +86,12 @@ nlohmann::json PostKraken(std::string uri,nlohmann::json comma,std::string key,s
 		a.command += "&"+comma[i][0].get<std::string>()+"="+comma[i][1].get<std::string>();
 	}
 
+
 	//sign request
 	std::string sig = sign(a);
 
 	//build command
-	std::string coms = ("curl -s -X \"POST\" \"https://api.kraken.com"+a.uri+"\" -H \"API-Key: "+a.key+"\" -H \"API-Sign: "+sig+"\" -H \"Content-Type: application/x-www-form-urlencoded; charset=utf-8\"  --data-urlencode \"nonce="+a.nonce+"\"");
+	std::string coms = ("curl -m 2 -s -X \"POST\" \"https://api.kraken.com"+a.uri+"\" -H \"API-Key: "+a.key+"\" -H \"API-Sign: "+sig+"\" -H \"Content-Type: application/x-www-form-urlencoded; charset=utf-8\"  --data-urlencode \"nonce="+a.nonce+"\"");
 
 	//check if a additiononal parmaters are add
 	for(int i = 0; i != comma.size(); i++)
@@ -113,12 +107,13 @@ nlohmann::json PostKraken(std::string uri,nlohmann::json comma,std::string key,s
 	//send command
 	run(coms.c_str());
 
+
 	//load json data
 	nlohmann::json j;
 	std::ifstream ifs(file);
 	j = nlohmann::json::parse(ifs);
 
-	std::remove(file.c_str());
+	//std::remove(file.c_str());
 
 	return j;
 } 
@@ -177,7 +172,7 @@ class Krak
 
 
 		//api simple buy order that buys at current market price (amount 0 buys as much as possible) (Requires api key and seceret)
-		json SimpleBuy(int amount,std::string symbol)
+		json SimpleBuy(double amount,std::string symbol)
 		{
 			json j;
 			json pair;
@@ -203,7 +198,7 @@ class Krak
 		}
 
 		//api simple sell order that sells at current market price (amount 0 buys as much as possible)(Requires api key and seceret)
-		json SimpleSell(int amount,std::string symbol)
+		json SimpleSell(double amount,std::string symbol)
 		{
 			json j;
 			json pair;
@@ -224,6 +219,66 @@ class Krak
 			pair[0] = "volume";
 			pair[1] = std::to_string(amount);
 			j[3] = pair;
+
+			return PostKraken("/0/private/AddOrder",j,this->key,this->sec);
+		}
+
+		//api Limit Buy order (amount 0 buys as much as possible)(Requires api key and seceret)
+		json LimitBuy(double amount,double price,std::string symbol)
+		{
+			json j;
+			json pair;
+
+			//set buy parms
+			pair[0] = "type";
+			pair[1] = "buy";
+			j[0] = pair;
+
+			pair[0] = "ordertype";
+			pair[1] = "limit";
+			j[1] = pair;
+
+			pair[0] = "pair";
+			pair[1] = symbol;
+			j[2] = pair;
+
+			pair[0] = "volume";
+			pair[1] = std::to_string(amount);
+			j[3] = pair;
+
+			pair[0] = "price";
+			pair[1] = std::to_string(price);
+			j[4] = pair;
+
+			return PostKraken("/0/private/AddOrder",j,this->key,this->sec);
+		}
+
+		//api Limit Sell order (amount 0 sells as much as possible)(Requires api key and seceret)
+		json LimitSell(double amount,double price,std::string symbol)
+		{
+			json j;
+			json pair;
+
+			//set buy parms
+			pair[0] = "type";
+			pair[1] = "sell";
+			j[0] = pair;
+
+			pair[0] = "ordertype";
+			pair[1] = "limit";
+			j[1] = pair;
+
+			pair[0] = "pair";
+			pair[1] = symbol;
+			j[2] = pair;
+
+			pair[0] = "volume";
+			pair[1] = std::to_string(amount);
+			j[3] = pair;
+
+			pair[0] = "price";
+			pair[1] = std::to_string(price);
+			j[4] = pair;
 
 			return PostKraken("/0/private/AddOrder",j,this->key,this->sec);
 		}
@@ -281,19 +336,14 @@ class Krak
 		//api to get current value of coin by each minute
 		json GetValue(std::string symbol)
 		{
-			std::string file = base64_encode((const unsigned char*)symbol.c_str(),symbol.size())+".json";
-			std::string command = "curl -s \"https://api.kraken.com/0/public/OHLC?pair="+symbol+"\" -o "+file;
+			//get data
+			net n;
+			n.Get("https://api.kraken.com/0/public/OHLC?pair="+symbol);
 
-			run(command.c_str());
+			//convert data to json
+			json j = json::parse(n.Response());
 
-
-			//load json data
-			nlohmann::json j;
-			std::ifstream ifs(file);
-			j = nlohmann::json::parse(ifs);
-
-			std::remove(file.c_str());
-
+			//return json data
 			return j["result"][symbol];
 		}
 
